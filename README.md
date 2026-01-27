@@ -36,6 +36,7 @@ AMD has recalled this update, but if you have already installed it, you must dow
 
 ## Table of Contents
 
+- [Prerequisites](#prerequisites)
 - [Quick Answers (Read This First)](#quick-answers-read-this-first)
 1. [Llama.cpp Compiled for Every Backend](#1-llamacpp-compiled-for-every-backend)  
     1.1 [Supported Container Images](#11-supported-container-images)
@@ -54,6 +55,27 @@ AMD has recalled this update, but if you have already installed it, you must dow
 8. [More Documentation](#8-more-documentation)  
 9. [References](#9-references)
 
+
+## Prerequisites
+
+You need `podman` and `toolbox` installed on your system:
+
+```bash
+# Fedora
+sudo dnf install podman toolbox
+
+# Ubuntu/Debian
+sudo apt install podman toolbox
+```
+
+Your user must be in the `video` group (and `render` group for ROCm):
+
+```bash
+sudo usermod -aG video,render $USER
+# Log out and back in for group changes to take effect
+```
+
+---
 
 ## Quick Answers (Read This First)
 
