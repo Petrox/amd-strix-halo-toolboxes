@@ -6,10 +6,9 @@ benchmark/models
 # Benchmark individual run logs (the merged results.json is what matters)
 benchmark/results/*.log
 
-# Keep results.json, results_new.json, and system_info.json
+# Keep results.json and results_new.json (system_info is embedded in these)
 !benchmark/results/results.json
 !benchmark/results/results_new.json
-!benchmark/results/system_info.json
 
 # Temporary/scratch files
 *.tmp
