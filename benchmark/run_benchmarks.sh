@@ -3,6 +3,7 @@ set -uo pipefail
 
 # Parse command line arguments
 MODEL_LIMIT=""
+START_INDEX=1
 while [[ $# -gt 0 ]]; do
   case $1 in
     --limit)
@@ -13,9 +14,18 @@ while [[ $# -gt 0 ]]; do
       MODEL_LIMIT="${1#*=}"
       shift
       ;;
+    --start-index)
+      START_INDEX="$2"
+      shift 2
+      ;;
+    --start-index=*)
+      START_INDEX="${1#*=}"
+      shift
+      ;;
     -h|--help)
-      echo "Usage: $0 [--limit N]"
-      echo "  --limit N    Limit the number of models to benchmark"
+      echo "Usage: $0 [--start-index N] [--limit N]"
+      echo "  --start-index N  Start from model N (1-based, alphabetically sorted)"
+      echo "  --limit N        Limit the number of models to benchmark"
       exit 0
       ;;
     *)
@@ -33,9 +43,27 @@ ts() {
 # Generate unique run ID: pid_timestamp (pid first so concurrent runs spread apart in sorted output)
 RUN_ID="$$_$(date +%s)"
 
-MODEL_DIR="$(realpath models)"
-RESULTDIR="results"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MODEL_DIR="$SCRIPT_DIR/models"
+RESULTDIR="$SCRIPT_DIR/results"
 mkdir -p "$RESULTDIR"
+
+# Check if models directory exists
+if [[ ! -d "$MODEL_DIR" ]]; then
+  echo "$(ts) Models directory not found: $MODEL_DIR"
+  LLAMA_CACHE="$HOME/.cache/llama.cpp"
+  if [[ -d "$LLAMA_CACHE" ]]; then
+    echo ""
+    echo "Found llama.cpp cache at $LLAMA_CACHE"
+    echo "To use it, create a symlink:"
+    echo ""
+    echo "  ln -s $LLAMA_CACHE $MODEL_DIR"
+    echo ""
+  else
+    echo "Create a 'models' directory and add .gguf files to benchmark."
+  fi
+  exit 1
+fi
 
 echo "$(ts) Starting benchmark run: ${RUN_ID}"
 
@@ -126,13 +154,27 @@ if (( ${#MODEL_PATHS[@]} == 0 )); then
   exit 1
 fi
 
+TOTAL_MODELS=${#MODEL_PATHS[@]}
+
+# Apply start index if specified (1-based: --start-index 2 means start at 2nd model)
+if (( START_INDEX > 1 )); then
+  SKIP_COUNT=$((START_INDEX - 1))
+  if (( SKIP_COUNT >= TOTAL_MODELS )); then
+    echo "$(ts) ❌ Start index $START_INDEX exceeds total models ($TOTAL_MODELS)"
+    exit 1
+  fi
+  echo "$(ts) Starting at model $START_INDEX (skipping first $SKIP_COUNT)"
+  MODEL_PATHS=("${MODEL_PATHS[@]:$SKIP_COUNT}")
+fi
+
 # Apply model limit if specified
 if [[ -n "$MODEL_LIMIT" ]] && (( MODEL_LIMIT > 0 )) && (( MODEL_LIMIT < ${#MODEL_PATHS[@]} )); then
-  echo "$(ts) Limiting to first $MODEL_LIMIT model(s) out of ${#MODEL_PATHS[@]} found"
+  echo "$(ts) Limiting to $MODEL_LIMIT model(s) out of ${#MODEL_PATHS[@]} remaining"
   MODEL_PATHS=("${MODEL_PATHS[@]:0:$MODEL_LIMIT}")
 fi
 
-echo "$(ts) Found ${#MODEL_PATHS[@]} model(s) to bench:"
+DISPLAY_END=$((START_INDEX + ${#MODEL_PATHS[@]} - 1))
+echo "$(ts) Benchmarking ${#MODEL_PATHS[@]} model(s) (#$START_INDEX-$DISPLAY_END of $TOTAL_MODELS):"
 for p in "${MODEL_PATHS[@]}"; do
   echo "  • $p"
 done
@@ -388,8 +430,6 @@ done
 # Generate results JSON files
 echo ""
 echo "$(ts) Generating results JSON files..."
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ -f "$SCRIPT_DIR/generate_results_json.py" ]]; then
   echo "$(ts) Running generate_results_json.py..."

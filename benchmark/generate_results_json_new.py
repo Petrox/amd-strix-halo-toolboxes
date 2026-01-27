@@ -10,7 +10,7 @@ This script extends the original generate_results_json.py to:
 """
 import re, glob, os, json, time, argparse
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 RESULT_SOURCES = [
     ("results", False),       # regular single-node runs
@@ -189,7 +189,7 @@ def parse_model_fingerprint(fingerprint_str):
             "partial_hash": parts[0],
             "size_bytes": int(parts[1]),
             "mtime_unix": int(parts[2]),
-            "mtime_iso": datetime.utcfromtimestamp(int(parts[2])).isoformat() + "Z"
+            "mtime_iso": datetime.fromtimestamp(int(parts[2]), timezone.utc).isoformat().replace("+00:00", "Z")
         }
     except (ValueError, OSError):
         return None
