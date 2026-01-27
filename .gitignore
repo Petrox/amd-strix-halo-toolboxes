@@ -1,5 +1,8 @@
 __pycache__
 
+# Model files (large binaries, user-specific)
+benchmark/models
+
 # Benchmark individual run logs (the merged results.json is what matters)
 benchmark/results/*.log
 
