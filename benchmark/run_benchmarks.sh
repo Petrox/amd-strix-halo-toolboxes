@@ -143,7 +143,7 @@ echo "$(ts) Captured system info to $RESULTDIR/system_info.json"
 #  - or the first shard "*-00001-of-*.gguf"
 # Exclude multimodal projection files (*mmproj*) as they are not benchmarkable LLMs
 mapfile -t MODEL_PATHS < <(
-  find "$MODEL_DIR" -type f -name '*.gguf' \
+  find -L "$MODEL_DIR" -type f -name '*.gguf' \
     \( -name '*-00001-of-*.gguf' -o -not -name '*-000*-of-*.gguf' \) \
     -not -iname '*mmproj*' \
     | sort
