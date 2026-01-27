@@ -1,6 +1,1 @@
-{
-    "distro": "Fedora Linux 42 (Workstation Edition)",
-    "kernel": "6.18.3-100.fc42.x86_64",
-    "linux_firmware": "linux-firmware-20251111-1.fc42.noarch",
-    "timestamp": "09 Jan 2026"
-}
+{"distro": "Fedora Linux 43 (MATE-Compiz)", "hostname": "dsstrix2", "kernel": "6.18.3-200.fc43.x86_64", "kernel_cmdline": "BOOT_IMAGE=(hd0,gpt2)/vmlinuz-6.18.3-200.fc43.x86_64 root=/dev/mapper/fedora_192-root ro rd.lvm.lv=fedora_192/root rhgb quiet noibrs noibpb nopti nospectre_v2 nospectre_v1 l1tf=off nospec_store_bypass_disable no_stf_barrier mds=off tsx=on tsx_async_abort=off mitigations=off amd_iommu=off amdgpu.gttsize=126976 ttm.pages_limit=32505856 nvme_core.default_ps_max_latency_us=0 elevator=none cpufreq.default_governor=performance transparent_hugepage=madvise iommu=pt usb4_dma_protection=off", "sysctl": {"vm.swappiness": "60", "vm.dirty_ratio": "20", "vm.dirty_background_ratio": "10", "vm.dirty_writeback_centisecs": "500", "kernel.sched_autogroup_enabled": "1"}, "linux_firmware": "linux-firmware-20251021-1.fc43.noarch", "repo_commit": "a654ead", "timestamp": "27 Jan 2026"}
