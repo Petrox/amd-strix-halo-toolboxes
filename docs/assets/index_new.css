@@ -1,0 +1,189 @@
+/* Multi-select dropdown styles */
+.multiselect {
+    position: relative;
+    min-width: 160px;
+}
+
+.multiselect-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-card, #fff);
+    border: 1px solid var(--border, #ddd);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    text-align: left;
+    gap: 0.5rem;
+}
+
+.multiselect-btn:hover {
+    border-color: var(--accent, #4f46e5);
+}
+
+.multiselect-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.multiselect-arrow {
+    font-size: 0.625rem;
+    opacity: 0.6;
+}
+
+.multiselect-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    background: var(--bg-card, #fff);
+    border: 1px solid var(--border, #ddd);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    max-height: 320px;
+    display: flex;
+    flex-direction: column;
+}
+
+.multiselect-dropdown.hidden {
+    display: none;
+}
+
+.multiselect-search {
+    margin: 0.5rem;
+    padding: 0.5rem;
+    border: 1px solid var(--border, #ddd);
+    border-radius: 4px;
+    font-size: 0.875rem;
+}
+
+.multiselect-search:focus {
+    outline: none;
+    border-color: var(--accent, #4f46e5);
+}
+
+.multiselect-actions {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0 0.5rem 0.5rem;
+    border-bottom: 1px solid var(--border, #eee);
+}
+
+.multiselect-actions button {
+    flex: 1;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    background: var(--bg-muted, #f5f5f5);
+    border: 1px solid var(--border, #ddd);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.multiselect-actions button:hover {
+    background: var(--bg-hover, #e5e5e5);
+}
+
+.multiselect-options {
+    overflow-y: auto;
+    flex: 1;
+    padding: 0.25rem 0;
+}
+
+.multiselect-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    cursor: pointer;
+    font-size: 0.8125rem;
+}
+
+.multiselect-option:hover {
+    background: var(--bg-hover, #f0f0f0);
+}
+
+.multiselect-option.hidden {
+    display: none;
+}
+
+.multiselect-option input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.multiselect-option-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.multiselect-option-meta {
+    font-size: 0.6875rem;
+    color: var(--text-muted, #888);
+}
+
+/* Run info styling */
+.run-info {
+    font-size: 0.75rem;
+    color: var(--text-muted, #666);
+    display: block;
+    margin-top: 2px;
+}
+
+/* Extend controls section for more items */
+.controls {
+    flex-wrap: wrap;
+}
+
+/* Table cell with run indicator */
+.data-cell .run-indicator {
+    font-size: 0.625rem;
+    color: var(--text-muted, #888);
+    display: block;
+    margin-top: 2px;
+}
+
+/* Run badge in table */
+.run-badge {
+    display: inline-block;
+    font-size: 0.625rem;
+    padding: 0.125rem 0.25rem;
+    background: var(--bg-muted, #f0f0f0);
+    border-radius: 3px;
+    margin-left: 0.25rem;
+}
+
+/* System info tooltip */
+.sysinfo-tooltip {
+    position: absolute;
+    background: var(--bg-card, #fff);
+    border: 1px solid var(--border, #ddd);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 0.75rem;
+    font-size: 0.75rem;
+    z-index: 200;
+    max-width: 400px;
+    white-space: pre-wrap;
+}
+
+.sysinfo-tooltip dt {
+    font-weight: 600;
+    color: var(--text-muted, #666);
+    margin-top: 0.5rem;
+}
+
+.sysinfo-tooltip dt:first-child {
+    margin-top: 0;
+}
+
+.sysinfo-tooltip dd {
+    margin: 0.125rem 0 0 0;
+}
