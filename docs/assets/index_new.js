@@ -40,22 +40,28 @@ const state = {
     draggingEnv: null,
 };
 
-document.addEventListener("DOMContentLoaded", async () => {
+document.addEventListener("DOMContentLoaded", () => {
     cacheUI();
     setupModals();
     setupMultiselects();
-    try {
-        const res = await fetch("results_new.json");
-        const data = await res.json();
-        state.rawData = data;
-        flattenRuns(data.runs);
-        prepareData();
-        initializeControls();
-        renderTables();
-    } catch (err) {
-        console.error("Failed to load results_new.json", err);
-        state.ui.stats.textContent = "Failed to load results_new.json";
+    // Data is loaded via <script src="results_new.jsonl.js"> which sets global _
+    if (typeof _ === "undefined" || !Array.isArray(_)) {
+        console.error("Failed to load results_new.jsonl.js - _ is not defined or not an array");
+        state.ui.stats.textContent = "Failed to load benchmark data";
+        return;
     }
+    // Convert array to runs object for compatibility
+    const runs = {};
+    for (const run of _) {
+        if (run.run_id) {
+            runs[run.run_id] = run;
+        }
+    }
+    state.rawData = { runs };
+    flattenRuns(runs);
+    prepareData();
+    initializeControls();
+    renderTables();
 });
 
 function cacheUI() {

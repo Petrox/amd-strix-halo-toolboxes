@@ -16,7 +16,7 @@ RESULT_SOURCES = [
     ("results", False),       # regular single-node runs
     ("results-rpc", True),    # distributed RPC runs across two servers
 ]
-OUT_JSON = "../docs/results_new.json"
+OUT_JSONL_JS = "../docs/results_new.jsonl.js"
 
 # --- Regexes ---------------------------------------------------------------
 
@@ -388,9 +388,60 @@ def scan_results():
     return runs, sys_info
 
 
+def load_jsonl_js(path):
+    """Load existing JSONL.js file and return dict of runs keyed by run_id."""
+    runs = {}
+    if not path.exists():
+        return runs
+    try:
+        text = path.read_text()
+        # Strip the _=[ prefix and ] suffix
+        text = text.strip()
+        if text.startswith("_=["):
+            text = text[3:]
+        if text.endswith("]"):
+            text = text[:-1]
+        # Parse each line as JSON
+        for line in text.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            # Remove trailing comma if present
+            if line.endswith(","):
+                line = line[:-1]
+            if not line:
+                continue
+            try:
+                run = json.loads(line)
+                run_id = run.get("run_id")
+                if run_id:
+                    runs[run_id] = run
+            except json.JSONDecodeError:
+                continue
+    except IOError:
+        pass
+    return runs
+
+
+def write_jsonl_js(path, runs_dict):
+    """Write runs as JSONL.js format: _=[\n{...},\n{...},\n]"""
+    # Sort runs by run_id for consistent output
+    sorted_runs = sorted(runs_dict.values(), key=lambda r: r.get("run_id", ""))
+
+    lines = ["_=["]
+    for run in sorted_runs:
+        # Sort keys within each run for git-friendly diffs
+        sorted_run = sort_dict_recursive(run)
+        lines.append(json.dumps(sorted_run, ensure_ascii=False, separators=(',', ':')) + ",")
+    lines.append("]")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Generate results_new.json with multi-run support")
-    parser.add_argument("--output", "-o", default=OUT_JSON, help=f"Output JSON file (default: {OUT_JSON})")
+    parser = argparse.ArgumentParser(description="Generate results_new.jsonl.js with multi-run support")
+    parser.add_argument("--output", "-o", default=OUT_JSONL_JS, help=f"Output JSONL.js file (default: {OUT_JSONL_JS})")
     args = parser.parse_args()
 
     out_path = Path(args.output)
@@ -399,18 +450,9 @@ def main():
     runs_from_logs, sys_info = scan_results()
 
     # Load existing file to merge with
-    if out_path.exists():
-        try:
-            with open(out_path) as f:
-                data = json.load(f)
-            if "runs" not in data:
-                data = {"schema_version": "1.0", "runs": {}}
-        except (json.JSONDecodeError, IOError):
-            data = {"schema_version": "1.0", "runs": {}}
-    else:
-        data = {"schema_version": "1.0", "runs": {}}
+    existing_runs = load_jsonl_js(out_path)
 
-    # Merge each run from logs into the data
+    # Merge each run from logs into existing runs
     new_runs = 0
     total_benchmarks = 0
     for run_id, run_data in runs_from_logs.items():
@@ -423,8 +465,9 @@ def main():
 
         total_benchmarks += len(benchmarks)
 
-        # Create run entry
+        # Create run entry with run_id embedded
         run_entry = {
+            "run_id": run_id,
             "system_info": sys_info,
             "benchmarks": benchmarks,
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -432,22 +475,18 @@ def main():
             "environments": sorted(envs),
         }
 
-        # Add/update run (always merge, never overwrite entire file)
-        if run_id not in data["runs"]:
+        # Add/update run
+        if run_id not in existing_runs:
             new_runs += 1
-        data["runs"][run_id] = run_entry
+        existing_runs[run_id] = run_entry
 
-    # Sort all keys recursively for git-friendly output
-    data = sort_dict_recursive(data)
-
-    # Write output
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    # Write output as JSONL.js
+    write_jsonl_js(out_path, existing_runs)
 
     print(f"Wrote {out_path}")
     print(f"  New runs added: {new_runs}")
     print(f"  Total benchmarks processed: {total_benchmarks}")
-    print(f"  Total runs in file: {len(data['runs'])}")
+    print(f"  Total runs in file: {len(existing_runs)}")
 
 
 if __name__ == "__main__":
