@@ -151,6 +151,8 @@ mapfile -t MODEL_PATHS < <(
 
 if (( ${#MODEL_PATHS[@]} == 0 )); then
   echo "$(ts) ❌ No models found under $MODEL_DIR – check your paths/patterns!"
+  echo "$(ts)    Tip: You can symlink your models cache, e.g.:"
+  echo "$(ts)    ln -s ~/.cache/llama.cpp $MODEL_DIR"
   exit 1
 fi
 
