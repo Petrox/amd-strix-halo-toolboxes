@@ -4,6 +4,7 @@ set -uo pipefail
 # Parse command line arguments
 MODEL_LIMIT=""
 START_INDEX=1
+TIMEOUT_SECS=1800
 while [[ $# -gt 0 ]]; do
   case $1 in
     --limit)
@@ -22,10 +23,19 @@ while [[ $# -gt 0 ]]; do
       START_INDEX="${1#*=}"
       shift
       ;;
+    --timeout)
+      TIMEOUT_SECS="$2"
+      shift 2
+      ;;
+    --timeout=*)
+      TIMEOUT_SECS="${1#*=}"
+      shift
+      ;;
     -h|--help)
-      echo "Usage: $0 [--start-index N] [--limit N]"
+      echo "Usage: $0 [--start-index N] [--limit N] [--timeout SECS]"
       echo "  --start-index N  Start from model N (1-based, alphabetically sorted)"
       echo "  --limit N        Limit the number of models to benchmark"
+      echo "  --timeout SECS   Max seconds per benchmark test (default: 1800)"
       exit 0
       ;;
     *)
@@ -385,8 +395,14 @@ for MODEL_PATH in "${MODEL_PATHS[@]}"; do
           # Write metadata header
           write_benchmark_meta "$OUT" "$TOOLBOX_NAME" "$MODEL_PATH" "$RUN_ID"
 
-          "${FULL_CMD[@]}" >>"$OUT" 2>&1
+          timeout "$TIMEOUT_SECS" "${FULL_CMD[@]}" >>"$OUT" 2>&1
           status=$?
+
+          # Check for timeout (exit code 124)
+          timed_out=false
+          if (( status == 124 )); then
+            timed_out=true
+          fi
 
           # Check if benchmark produced valid results (look for the results table)
           has_results=false
@@ -397,7 +413,9 @@ for MODEL_PATH in "${MODEL_PATHS[@]}"; do
           if (( status != 0 )) || [[ "$has_results" == "false" ]]; then
             # Extract error reason from log
             error_reason=""
-            if grep -qi "failed to load model" "$OUT" 2>/dev/null; then
+            if [[ "$timed_out" == "true" ]]; then
+              error_reason="timeout after ${TIMEOUT_SECS}s"
+            elif grep -qi "failed to load model" "$OUT" 2>/dev/null; then
               error_reason="failed to load model"
             elif grep -qi "not a valid gguf file" "$OUT" 2>/dev/null; then
               error_reason="not a valid GGUF file"
