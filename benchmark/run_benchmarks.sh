@@ -395,7 +395,7 @@ for MODEL_PATH in "${MODEL_PATHS[@]}"; do
           # Write metadata header
           write_benchmark_meta "$OUT" "$TOOLBOX_NAME" "$MODEL_PATH" "$RUN_ID"
 
-          timeout "$TIMEOUT_SECS" "${FULL_CMD[@]}" >>"$OUT" 2>&1
+          timeout "$TIMEOUT_SECS" "${FULL_CMD[@]}" </dev/null >>"$OUT" 2>&1
           status=$?
 
           # Check for timeout (exit code 124)
