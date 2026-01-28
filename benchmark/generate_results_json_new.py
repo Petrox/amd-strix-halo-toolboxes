@@ -475,10 +475,10 @@ def main():
             "environments": sorted(envs),
         }
 
-        # Add/update run
+        # Only add new runs, don't overwrite existing ones (preserves generated_at for merging)
         if run_id not in existing_runs:
             new_runs += 1
-        existing_runs[run_id] = run_entry
+            existing_runs[run_id] = run_entry
 
     # Write output as JSONL.js
     write_jsonl_js(out_path, existing_runs)
