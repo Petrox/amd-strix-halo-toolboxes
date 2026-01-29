@@ -72,7 +72,7 @@ function cacheUI() {
         kernelSelect: document.getElementById("kernel-select"),
         firmwareSelect: document.getElementById("firmware-select"),
         runSelect: document.getElementById("run-select"),
-        contextChips: document.getElementById("context-chips"),
+        contextSelect: document.getElementById("context-select"),
         backendList: document.getElementById("backend-list"),
         backendAll: document.getElementById("backend-all"),
         backendNone: document.getElementById("backend-none"),
@@ -272,24 +272,8 @@ function initializeControls() {
     populateMultiselect(state.ui.firmwareSelect, state.options.firmwares, state.filters.firmwares, "firmwares", "All firmware");
     populateMultiselectRuns(state.ui.runSelect, state.options.runs, state.filters.runs);
 
-    // Context chips
-    state.ui.contextChips.innerHTML = "";
-    state.contexts.forEach((ctx) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "chip" + (ctx.key === state.filters.context ? " active" : "");
-        btn.dataset.context = ctx.key;
-        btn.textContent = ctx.label;
-        state.ui.contextChips.appendChild(btn);
-    });
-
-    state.ui.contextChips.addEventListener("click", (e) => {
-        const btn = e.target.closest("button[data-context]");
-        if (!btn) return;
-        state.filters.context = btn.dataset.context;
-        [...state.ui.contextChips.querySelectorAll("button")].forEach((b) => b.classList.toggle("active", b === btn));
-        renderTables();
-    });
+    // Context dropdown (single-select)
+    populateSingleSelectContext(state.ui.contextSelect, state.contexts, state.filters.context);
 
     renderBackendList();
     setupSizeSlider();
@@ -336,9 +320,7 @@ function initializeControls() {
         populateMultiselect(state.ui.firmwareSelect, state.options.firmwares, state.filters.firmwares, "firmwares", "All firmware");
         populateMultiselectRuns(state.ui.runSelect, state.options.runs, state.filters.runs);
 
-        [...state.ui.contextChips.querySelectorAll("button")].forEach((btn) =>
-            btn.classList.toggle("active", btn.dataset.context === state.filters.context)
-        );
+        populateSingleSelectContext(state.ui.contextSelect, state.contexts, state.filters.context);
         renderBackendList();
         setupSizeSlider();
         renderTables();
@@ -441,14 +423,14 @@ function populateMultiselectRuns(container, runIds, selected) {
         const run = state.rawData?.runs?.[runId];
         const sysInfo = run?.system_info || {};
         const hostname = sysInfo.hostname || "unknown";
-        const timestamp = sysInfo.timestamp || runId;
+        const isoDatetime = formatRunTimestamp(sysInfo.timestamp, runId);
 
         const div = document.createElement("div");
         div.className = "multiselect-option";
         div.innerHTML = `
             <input type="checkbox" ${selected.has(runId) ? "checked" : ""}>
-            <span class="multiselect-option-label">${hostname}</span>
-            <span class="multiselect-option-meta">${timestamp}</span>
+            <span class="multiselect-option-label">${isoDatetime}</span>
+            <span class="multiselect-option-meta">${hostname}</span>
         `;
         div.querySelector("input").addEventListener("change", (e) => {
             if (e.target.checked) {
@@ -500,6 +482,37 @@ function updateMultiselectLabel(container, options, selected, allLabel) {
     } else {
         labelSpan.textContent = `${selected.size} selected`;
     }
+}
+
+function populateSingleSelectContext(container, contexts, selectedKey) {
+    const dropdown = container.querySelector(".multiselect-dropdown");
+    const optionsDiv = dropdown.querySelector(".multiselect-options");
+    const labelSpan = container.querySelector(".multiselect-label");
+
+    optionsDiv.innerHTML = "";
+    contexts.forEach((ctx) => {
+        const div = document.createElement("div");
+        div.className = "multiselect-option single-select-option" + (ctx.key === selectedKey ? " selected" : "");
+        div.dataset.context = ctx.key;
+        div.innerHTML = `<span class="multiselect-option-label">${ctx.label}</span>`;
+        div.addEventListener("click", () => {
+            state.filters.context = ctx.key;
+            // Update selected state
+            optionsDiv.querySelectorAll(".multiselect-option").forEach((opt) => {
+                opt.classList.toggle("selected", opt.dataset.context === ctx.key);
+            });
+            // Update label
+            labelSpan.textContent = ctx.label;
+            // Close dropdown
+            dropdown.classList.add("hidden");
+            renderTables();
+        });
+        optionsDiv.appendChild(div);
+    });
+
+    // Set initial label
+    const selected = contexts.find((c) => c.key === selectedKey);
+    labelSpan.textContent = selected?.label || "Select context";
 }
 
 function renderBackendList() {
@@ -748,8 +761,9 @@ function getBestCellForEnv(model, env) {
         if (cell.env === env && state.filters.runs.has(cell.run_id)) {
             // Also check kernel and firmware filters
             const sysInfo = cell.system_info || {};
-            if (state.filters.kernels.size > 0 && sysInfo.kernel && !state.filters.kernels.has(sysInfo.kernel)) continue;
-            if (state.filters.firmwares.size > 0 && sysInfo.linux_firmware && !state.filters.firmwares.has(sysInfo.linux_firmware)) continue;
+            // Empty filter = nothing matches; otherwise filter by selected values
+            if (state.filters.kernels.size === 0 || (sysInfo.kernel && !state.filters.kernels.has(sysInfo.kernel))) continue;
+            if (state.filters.firmwares.size === 0 || (sysInfo.linux_firmware && !state.filters.firmwares.has(sysInfo.linux_firmware))) continue;
             cells.push(cell);
         }
     }
@@ -831,10 +845,10 @@ function moveBackend(from, to) {
 function filterModels(modelsMap) {
     const models = [];
     for (const model of modelsMap.values()) {
-        // Filter by model name
-        if (state.filters.models.size > 0 && !state.filters.models.has(model.model)) continue;
-        // Filter by quant
-        if (state.filters.quants.size > 0 && !state.filters.quants.has(model.quant)) continue;
+        // Filter by model name (empty filter = nothing matches)
+        if (!state.filters.models.has(model.model)) continue;
+        // Filter by quant (empty filter = nothing matches)
+        if (!state.filters.quants.has(model.quant)) continue;
         // Filter by size
         if (model.sizeB != null) {
             if (state.filters.sizeLo != null && model.sizeB < state.filters.sizeLo - 1e-6) continue;
@@ -889,6 +903,25 @@ function formatSize(size) {
 function formatSizeLabel(size) {
     if (size >= 1000) return `${(size / 1000).toFixed(1)}kB`;
     return `${Math.round(size)}B`;
+}
+
+function formatRunTimestamp(timestamp, runId) {
+    // Try to extract Unix timestamp from run_id (format: "PID_UNIXTIME")
+    if (runId) {
+        const parts = runId.split("_");
+        if (parts.length >= 2) {
+            const unixTime = parseInt(parts[parts.length - 1], 10);
+            if (!isNaN(unixTime) && unixTime > 1000000000) {
+                const date = new Date(unixTime * 1000);
+                if (!isNaN(date.getTime())) {
+                    return date.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+                }
+            }
+        }
+    }
+    // Fallback to provided timestamp or run_id
+    if (timestamp) return timestamp;
+    return runId || "unknown";
 }
 
 function sortBackendsByModel(model, direction) {

@@ -129,6 +129,25 @@
     color: var(--text-muted, #888);
 }
 
+/* Single-select option (e.g., context dropdown) */
+.single-select-option.selected {
+    background: var(--accent-light, #e0e7ff);
+    font-weight: 500;
+}
+
+.single-select-option.selected:hover {
+    background: var(--accent-light, #e0e7ff);
+}
+
+/* Wider dropdown for runs (to fit ISO timestamps) */
+#run-select {
+    min-width: 280px;
+}
+
+#run-select .multiselect-dropdown {
+    min-width: 320px;
+}
+
 /* Run info styling */
 .run-info {
     font-size: 0.75rem;

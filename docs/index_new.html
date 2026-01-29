@@ -99,9 +99,34 @@
                 </div>
             </div>
         </div>
-        <div class="control grow slider-block">
-            <label>Context windows</label>
-            <div id="context-chips" class="chip-row tight"></div>
+        <div class="control">
+            <label>Context</label>
+            <div class="multiselect" id="context-select">
+                <button type="button" class="multiselect-btn">
+                    <span class="multiselect-label">Default window</span>
+                    <span class="multiselect-arrow">&#9660;</span>
+                </button>
+                <div class="multiselect-dropdown hidden">
+                    <div class="multiselect-options"></div>
+                </div>
+            </div>
+        </div>
+        <div class="control">
+            <label>Runs</label>
+            <div class="multiselect" id="run-select">
+                <button type="button" class="multiselect-btn">
+                    <span class="multiselect-label">All runs</span>
+                    <span class="multiselect-arrow">&#9660;</span>
+                </button>
+                <div class="multiselect-dropdown hidden">
+                    <input type="text" class="multiselect-search" placeholder="Search runs...">
+                    <div class="multiselect-actions">
+                        <button type="button" class="multiselect-all">Select All</button>
+                        <button type="button" class="multiselect-none">Clear</button>
+                    </div>
+                    <div class="multiselect-options"></div>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -115,23 +140,6 @@
             </div>
             <div class="range-values">
                 <span id="sizeLoVal">0B</span> – <span id="sizeHiVal">0B</span>
-            </div>
-        </div>
-        <div class="control">
-            <label>Runs</label>
-            <div class="multiselect" id="run-select">
-                <button type="button" class="multiselect-btn">
-                    <span class="multiselect-label">All runs</span>
-                    <span class="multiselect-arrow">▼</span>
-                </button>
-                <div class="multiselect-dropdown hidden">
-                    <input type="text" class="multiselect-search" placeholder="Search runs...">
-                    <div class="multiselect-actions">
-                        <button type="button" class="multiselect-all">Select All</button>
-                        <button type="button" class="multiselect-none">Clear</button>
-                    </div>
-                    <div class="multiselect-options"></div>
-                </div>
             </div>
         </div>
     </section>
