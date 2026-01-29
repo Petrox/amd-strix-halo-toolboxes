@@ -524,7 +524,8 @@ echo "$(ts)   Passed:  ${PASSED_COUNT}"
 echo "$(ts)   Failed:  ${FAILED_COUNT}"
 echo "$(ts)   Skipped: ${SKIPPED_COUNT}"
 if (( ${#MODELS_TESTED[@]} > 0 )); then
-  echo "$(ts)   Models:  ${#MODELS_TESTED[@]} (${!MODELS_TESTED[*]::3}...)" | cut -c1-100
+  MODEL_LIST=$(printf '%s, ' "${!MODELS_TESTED[@]}" | head -c 80)
+  echo "$(ts)   Models:  ${#MODELS_TESTED[@]} (${MODEL_LIST%,*})"
 fi
 if (( ${#ENVS_USED[@]} > 0 )); then
   echo "$(ts)   Envs:    ${!ENVS_USED[*]}"
