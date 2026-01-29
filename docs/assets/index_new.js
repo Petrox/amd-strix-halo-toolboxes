@@ -27,6 +27,10 @@ const state = {
         backends: new Set(),
         sizeLo: null,
         sizeHi: null,
+        dateLo: null,
+        dateHi: null,
+        groupByKernel: false,
+        groupByFirmware: false,
     },
     options: {
         models: [],
@@ -37,6 +41,8 @@ const state = {
     },
     ui: {},
     sizeStats: { min: Infinity, max: -Infinity },
+    dateStats: { min: Infinity, max: -Infinity },
+    runTimestamps: new Map(), // run_id -> unix timestamp
     draggingEnv: null,
 };
 
@@ -72,7 +78,7 @@ function cacheUI() {
         kernelSelect: document.getElementById("kernel-select"),
         firmwareSelect: document.getElementById("firmware-select"),
         runSelect: document.getElementById("run-select"),
-        contextChips: document.getElementById("context-chips"),
+        contextSelect: document.getElementById("context-select"),
         backendList: document.getElementById("backend-list"),
         backendAll: document.getElementById("backend-all"),
         backendNone: document.getElementById("backend-none"),
@@ -81,8 +87,15 @@ function cacheUI() {
         sizeTrack: document.getElementById("sizeTrack"),
         sizeLoVal: document.getElementById("sizeLoVal"),
         sizeHiVal: document.getElementById("sizeHiVal"),
+        dateLo: document.getElementById("dateLo"),
+        dateHi: document.getElementById("dateHi"),
+        dateTrack: document.getElementById("dateTrack"),
+        dateLoVal: document.getElementById("dateLoVal"),
+        dateHiVal: document.getElementById("dateHiVal"),
         stats: document.getElementById("stats-line"),
         resetBtn: document.getElementById("reset-layout"),
+        groupByKernel: document.getElementById("group-by-kernel"),
+        groupByFirmware: document.getElementById("group-by-firmware"),
         tables: document.getElementById("tables"),
         hipblasModalOpen: document.getElementById("hipblas-modal-open"),
         hipblasModal: document.getElementById("hipblas-modal"),
@@ -134,6 +147,14 @@ function flattenRuns(runs) {
     for (const [runId, run] of Object.entries(runs || {})) {
         const sysInfo = run.system_info || {};
         runSet.add(runId);
+
+        // Extract Unix timestamp from run_id and track date stats
+        const unixTime = extractUnixTimestamp(runId);
+        if (unixTime) {
+            state.runTimestamps.set(runId, unixTime);
+            state.dateStats.min = Math.min(state.dateStats.min, unixTime);
+            state.dateStats.max = Math.max(state.dateStats.max, unixTime);
+        }
 
         if (sysInfo.kernel) kernelSet.add(sysInfo.kernel);
         if (sysInfo.linux_firmware) firmwareSet.add(sysInfo.linux_firmware);
@@ -272,27 +293,12 @@ function initializeControls() {
     populateMultiselect(state.ui.firmwareSelect, state.options.firmwares, state.filters.firmwares, "firmwares", "All firmware");
     populateMultiselectRuns(state.ui.runSelect, state.options.runs, state.filters.runs);
 
-    // Context chips
-    state.ui.contextChips.innerHTML = "";
-    state.contexts.forEach((ctx) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "chip" + (ctx.key === state.filters.context ? " active" : "");
-        btn.dataset.context = ctx.key;
-        btn.textContent = ctx.label;
-        state.ui.contextChips.appendChild(btn);
-    });
-
-    state.ui.contextChips.addEventListener("click", (e) => {
-        const btn = e.target.closest("button[data-context]");
-        if (!btn) return;
-        state.filters.context = btn.dataset.context;
-        [...state.ui.contextChips.querySelectorAll("button")].forEach((b) => b.classList.toggle("active", b === btn));
-        renderTables();
-    });
+    // Context dropdown (single-select)
+    populateSingleSelectContext(state.ui.contextSelect, state.contexts, state.filters.context);
 
     renderBackendList();
     setupSizeSlider();
+    setupDateSlider();
 
     state.ui.backendList.addEventListener("change", (e) => {
         const checkbox = e.target.closest("input[data-env]");
@@ -321,6 +327,18 @@ function initializeControls() {
     state.ui.sizeLo.addEventListener("input", () => updateSizeUI(true));
     state.ui.sizeHi.addEventListener("input", () => updateSizeUI(true));
 
+    state.ui.dateLo.addEventListener("input", () => updateDateUI(true));
+    state.ui.dateHi.addEventListener("input", () => updateDateUI(true));
+
+    state.ui.groupByKernel.addEventListener("change", () => {
+        state.filters.groupByKernel = state.ui.groupByKernel.checked;
+        renderTables();
+    });
+    state.ui.groupByFirmware.addEventListener("change", () => {
+        state.filters.groupByFirmware = state.ui.groupByFirmware.checked;
+        renderTables();
+    });
+
     state.ui.resetBtn.addEventListener("click", () => {
         state.filters.models = new Set(state.options.models);
         state.filters.quants = new Set(state.options.quants);
@@ -329,6 +347,8 @@ function initializeControls() {
         state.filters.runs = new Set(state.options.runs);
         state.filters.context = state.contexts[0]?.key || DEFAULT_CTX;
         state.filters.backends = new Set(state.envs);
+        state.filters.groupByKernel = false;
+        state.filters.groupByFirmware = false;
 
         populateMultiselect(state.ui.modelSelect, state.options.models, state.filters.models, "models", "All models");
         populateMultiselect(state.ui.quantSelect, state.options.quants, state.filters.quants, "quants", "All quants");
@@ -336,11 +356,12 @@ function initializeControls() {
         populateMultiselect(state.ui.firmwareSelect, state.options.firmwares, state.filters.firmwares, "firmwares", "All firmware");
         populateMultiselectRuns(state.ui.runSelect, state.options.runs, state.filters.runs);
 
-        [...state.ui.contextChips.querySelectorAll("button")].forEach((btn) =>
-            btn.classList.toggle("active", btn.dataset.context === state.filters.context)
-        );
+        populateSingleSelectContext(state.ui.contextSelect, state.contexts, state.filters.context);
+        state.ui.groupByKernel.checked = false;
+        state.ui.groupByFirmware.checked = false;
         renderBackendList();
         setupSizeSlider();
+        setupDateSlider();
         renderTables();
     });
 }
@@ -377,10 +398,22 @@ function setupMultiselects() {
 function populateMultiselect(container, options, selected, filterKey, allLabel) {
     const dropdown = container.querySelector(".multiselect-dropdown");
     const optionsDiv = dropdown.querySelector(".multiselect-options");
-    const searchInput = dropdown.querySelector(".multiselect-search");
-    const labelSpan = container.querySelector(".multiselect-label");
-    const selectAllBtn = dropdown.querySelector(".multiselect-all");
-    const selectNoneBtn = dropdown.querySelector(".multiselect-none");
+    let searchInput = dropdown.querySelector(".multiselect-search");
+    let selectAllBtn = dropdown.querySelector(".multiselect-all");
+    let selectNoneBtn = dropdown.querySelector(".multiselect-none");
+
+    // Clone and replace to remove old event listeners
+    const newSearchInput = searchInput.cloneNode(true);
+    searchInput.parentNode.replaceChild(newSearchInput, searchInput);
+    searchInput = newSearchInput;
+
+    const newSelectAllBtn = selectAllBtn.cloneNode(true);
+    selectAllBtn.parentNode.replaceChild(newSelectAllBtn, selectAllBtn);
+    selectAllBtn = newSelectAllBtn;
+
+    const newSelectNoneBtn = selectNoneBtn.cloneNode(true);
+    selectNoneBtn.parentNode.replaceChild(newSelectNoneBtn, selectNoneBtn);
+    selectNoneBtn = newSelectNoneBtn;
 
     optionsDiv.innerHTML = "";
     options.forEach((opt) => {
@@ -431,24 +464,36 @@ function populateMultiselect(container, options, selected, filterKey, allLabel) 
 function populateMultiselectRuns(container, runIds, selected) {
     const dropdown = container.querySelector(".multiselect-dropdown");
     const optionsDiv = dropdown.querySelector(".multiselect-options");
-    const searchInput = dropdown.querySelector(".multiselect-search");
-    const labelSpan = container.querySelector(".multiselect-label");
-    const selectAllBtn = dropdown.querySelector(".multiselect-all");
-    const selectNoneBtn = dropdown.querySelector(".multiselect-none");
+    let searchInput = dropdown.querySelector(".multiselect-search");
+    let selectAllBtn = dropdown.querySelector(".multiselect-all");
+    let selectNoneBtn = dropdown.querySelector(".multiselect-none");
+
+    // Clone and replace to remove old event listeners
+    const newSearchInput = searchInput.cloneNode(true);
+    searchInput.parentNode.replaceChild(newSearchInput, searchInput);
+    searchInput = newSearchInput;
+
+    const newSelectAllBtn = selectAllBtn.cloneNode(true);
+    selectAllBtn.parentNode.replaceChild(newSelectAllBtn, selectAllBtn);
+    selectAllBtn = newSelectAllBtn;
+
+    const newSelectNoneBtn = selectNoneBtn.cloneNode(true);
+    selectNoneBtn.parentNode.replaceChild(newSelectNoneBtn, selectNoneBtn);
+    selectNoneBtn = newSelectNoneBtn;
 
     optionsDiv.innerHTML = "";
     runIds.forEach((runId) => {
         const run = state.rawData?.runs?.[runId];
         const sysInfo = run?.system_info || {};
         const hostname = sysInfo.hostname || "unknown";
-        const timestamp = sysInfo.timestamp || runId;
+        const isoDatetime = formatRunTimestamp(sysInfo.timestamp, runId);
 
         const div = document.createElement("div");
         div.className = "multiselect-option";
         div.innerHTML = `
             <input type="checkbox" ${selected.has(runId) ? "checked" : ""}>
-            <span class="multiselect-option-label">${hostname}</span>
-            <span class="multiselect-option-meta">${timestamp}</span>
+            <span class="multiselect-option-label">${isoDatetime}</span>
+            <span class="multiselect-option-meta">${hostname}</span>
         `;
         div.querySelector("input").addEventListener("change", (e) => {
             if (e.target.checked) {
@@ -500,6 +545,37 @@ function updateMultiselectLabel(container, options, selected, allLabel) {
     } else {
         labelSpan.textContent = `${selected.size} selected`;
     }
+}
+
+function populateSingleSelectContext(container, contexts, selectedKey) {
+    const dropdown = container.querySelector(".multiselect-dropdown");
+    const optionsDiv = dropdown.querySelector(".multiselect-options");
+    const labelSpan = container.querySelector(".multiselect-label");
+
+    optionsDiv.innerHTML = "";
+    contexts.forEach((ctx) => {
+        const div = document.createElement("div");
+        div.className = "multiselect-option single-select-option" + (ctx.key === selectedKey ? " selected" : "");
+        div.dataset.context = ctx.key;
+        div.innerHTML = `<span class="multiselect-option-label">${ctx.label}</span>`;
+        div.addEventListener("click", () => {
+            state.filters.context = ctx.key;
+            // Update selected state
+            optionsDiv.querySelectorAll(".multiselect-option").forEach((opt) => {
+                opt.classList.toggle("selected", opt.dataset.context === ctx.key);
+            });
+            // Update label
+            labelSpan.textContent = ctx.label;
+            // Close dropdown
+            dropdown.classList.add("hidden");
+            renderTables();
+        });
+        optionsDiv.appendChild(div);
+    });
+
+    // Set initial label
+    const initialContext = contexts.find((c) => c.key === selectedKey);
+    labelSpan.textContent = initialContext?.label || "Select context";
 }
 
 function renderBackendList() {
@@ -571,6 +647,56 @@ function updateSizeUI(triggerRender) {
     const start = ((state.filters.sizeLo - minB) / range) * 100;
     const end = ((state.filters.sizeHi - minB) / range) * 100;
     sizeTrack.style.background = `linear-gradient(to right, #e3e7f1 ${start}%, var(--accent) ${start}%, var(--accent) ${end}%, #e3e7f1 ${end}%)`;
+    if (triggerRender) renderTables();
+}
+
+function setupDateSlider() {
+    const { dateLo, dateHi } = state.ui;
+    const minTs = state.dateStats.min === Infinity ? Math.floor(Date.now() / 1000) : state.dateStats.min;
+    const maxTs = state.dateStats.max === -Infinity ? Math.floor(Date.now() / 1000) : state.dateStats.max;
+
+    // Round to day boundaries (in seconds)
+    const dayInSeconds = 86400;
+    const minDay = Math.floor(minTs / dayInSeconds) * dayInSeconds;
+    const maxDay = Math.ceil(maxTs / dayInSeconds) * dayInSeconds;
+
+    [dateLo, dateHi].forEach((inp) => {
+        inp.min = minDay;
+        inp.max = maxDay;
+        inp.step = dayInSeconds;
+    });
+
+    // Default: last 60 days or from min if range is smaller
+    const sixtyDaysAgo = maxDay - (60 * dayInSeconds);
+    const defaultLo = Math.max(minDay, sixtyDaysAgo);
+
+    dateLo.value = defaultLo;
+    dateHi.value = maxDay;
+    dateLo.style.zIndex = 2;
+    dateHi.style.zIndex = 1;
+    updateDateUI(false);
+}
+
+function updateDateUI(triggerRender) {
+    const { dateLo, dateHi, dateLoVal, dateHiVal, dateTrack } = state.ui;
+    if (+dateLo.value > +dateHi.value) {
+        if (document.activeElement === dateLo) {
+            dateHi.value = dateLo.value;
+        } else {
+            dateLo.value = dateHi.value;
+        }
+    }
+    dateLo.style.zIndex = +dateLo.value >= +dateHi.max - 86400 ? 4 : 2;
+    dateHi.style.zIndex = +dateHi.value <= +dateLo.min + 86400 ? 3 : 1;
+    state.filters.dateLo = +dateLo.value;
+    state.filters.dateHi = +dateHi.value;
+    dateLoVal.textContent = formatDateLabel(state.filters.dateLo);
+    dateHiVal.textContent = formatDateLabel(state.filters.dateHi);
+    const range = (+dateHi.max - +dateLo.min) || 1;
+    const minTs = +dateLo.min;
+    const start = ((state.filters.dateLo - minTs) / range) * 100;
+    const end = ((state.filters.dateHi - minTs) / range) * 100;
+    dateTrack.style.background = `linear-gradient(to right, #e3e7f1 ${start}%, var(--accent) ${start}%, var(--accent) ${end}%, #e3e7f1 ${end}%)`;
     if (triggerRender) renderTables();
 }
 
@@ -677,6 +803,21 @@ function buildSingleTable(models, backendList) {
         meta.textContent = `${model.quant} · ${formatSize(model.sizeB)}`;
         tdModel.appendChild(meta);
 
+        // Show grouping info when grouped
+        if (model._groupKernel || model._groupFirmware) {
+            const subinfo = document.createElement("div");
+            subinfo.className = "model-subinfo";
+            const parts = [];
+            if (model._groupKernel) {
+                parts.push(`<span class="model-subinfo-label">Kernel:</span>${model._groupKernel}`);
+            }
+            if (model._groupFirmware) {
+                parts.push(`<span class="model-subinfo-label">FW:</span>${model._groupFirmware}`);
+            }
+            subinfo.innerHTML = parts.join(" · ");
+            tdModel.appendChild(subinfo);
+        }
+
         const actionWrap = document.createElement("div");
         actionWrap.className = "row-actions";
         const btnDesc = document.createElement("button");
@@ -746,10 +887,25 @@ function getBestCellForEnv(model, env) {
     const cells = [];
     for (const [cellKey, cell] of Object.entries(model.backends)) {
         if (cell.env === env && state.filters.runs.has(cell.run_id)) {
+            // Check date range filter
+            const runTs = state.runTimestamps.get(cell.run_id);
+            if (state.filters.dateLo != null && state.filters.dateHi != null) {
+                // If run has a timestamp, filter by date range
+                // If run has no timestamp, exclude it when date filter is active
+                if (runTs === undefined || runTs < state.filters.dateLo || runTs > state.filters.dateHi + 86400) {
+                    continue;
+                }
+            }
             // Also check kernel and firmware filters
             const sysInfo = cell.system_info || {};
-            if (state.filters.kernels.size > 0 && sysInfo.kernel && !state.filters.kernels.has(sysInfo.kernel)) continue;
-            if (state.filters.firmwares.size > 0 && sysInfo.linux_firmware && !state.filters.firmwares.has(sysInfo.linux_firmware)) continue;
+            // Empty filter = nothing matches
+            if (state.filters.kernels.size === 0) continue;
+            if (state.filters.firmwares.size === 0) continue;
+            // If filtering is active (not all selected), exclude cells without info or with non-matching info
+            const kernelFilterActive = state.filters.kernels.size < state.options.kernels.length;
+            const firmwareFilterActive = state.filters.firmwares.size < state.options.firmwares.length;
+            if (kernelFilterActive && (!sysInfo.kernel || !state.filters.kernels.has(sysInfo.kernel))) continue;
+            if (firmwareFilterActive && (!sysInfo.linux_firmware || !state.filters.firmwares.has(sysInfo.linux_firmware))) continue;
             cells.push(cell);
         }
     }
@@ -828,22 +984,123 @@ function moveBackend(from, to) {
     renderTables();
 }
 
+function modelHasVisibleData(model, backends) {
+    // Check if the model has at least one cell with data after all filters
+    for (const env of backends) {
+        const cell = getBestCellForEnv(model, env);
+        if (cell && !cell.error && cell.mean != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function filterModels(modelsMap) {
     const models = [];
+    const visibleBackends = state.backendOrder.filter((env) => state.filters.backends.has(env));
+    const groupByKernel = state.filters.groupByKernel;
+    const groupByFirmware = state.filters.groupByFirmware;
+
     for (const model of modelsMap.values()) {
-        // Filter by model name
-        if (state.filters.models.size > 0 && !state.filters.models.has(model.model)) continue;
-        // Filter by quant
-        if (state.filters.quants.size > 0 && !state.filters.quants.has(model.quant)) continue;
+        // Filter by model name (empty filter = nothing matches)
+        if (!state.filters.models.has(model.model)) continue;
+        // Filter by quant (empty filter = nothing matches)
+        if (!state.filters.quants.has(model.quant)) continue;
         // Filter by size
         if (model.sizeB != null) {
             if (state.filters.sizeLo != null && model.sizeB < state.filters.sizeLo - 1e-6) continue;
             if (state.filters.sizeHi != null && model.sizeB > state.filters.sizeHi + 1e-6) continue;
         }
-        models.push(model);
+
+        // If grouping is enabled, expand into grouped rows
+        if (groupByKernel || groupByFirmware) {
+            const groupedModels = expandModelForGrouping(model, groupByKernel, groupByFirmware);
+            for (const gm of groupedModels) {
+                if (modelHasVisibleData(gm, visibleBackends)) {
+                    models.push(gm);
+                }
+            }
+        } else {
+            // Filter out models with no visible data after date/kernel/firmware filters
+            if (!modelHasVisibleData(model, visibleBackends)) continue;
+            models.push(model);
+        }
     }
-    models.sort((a, b) => a.model.localeCompare(b.model));
+    models.sort((a, b) => {
+        const nameCompare = a.model.localeCompare(b.model);
+        if (nameCompare !== 0) return nameCompare;
+        // Sort by kernel then firmware within same model
+        if (a._groupKernel && b._groupKernel) {
+            const kernelCompare = a._groupKernel.localeCompare(b._groupKernel);
+            if (kernelCompare !== 0) return kernelCompare;
+        }
+        if (a._groupFirmware && b._groupFirmware) {
+            return a._groupFirmware.localeCompare(b._groupFirmware);
+        }
+        return 0;
+    });
     return models;
+}
+
+/**
+ * Expand a model into multiple grouped rows based on kernel/firmware combinations
+ */
+function expandModelForGrouping(model, groupByKernel, groupByFirmware) {
+    // Collect all unique kernel/firmware combinations from cells that pass filters
+    const groups = new Map(); // key -> { kernel, firmware, cells }
+
+    for (const [cellKey, cell] of Object.entries(model.backends)) {
+        if (!state.filters.runs.has(cell.run_id)) continue;
+
+        // Check date range filter
+        const runTs = state.runTimestamps.get(cell.run_id);
+        if (state.filters.dateLo != null && state.filters.dateHi != null) {
+            if (runTs === undefined || runTs < state.filters.dateLo || runTs > state.filters.dateHi + 86400) {
+                continue;
+            }
+        }
+
+        const sysInfo = cell.system_info || {};
+        // Check kernel/firmware filters
+        // Empty filter = nothing matches
+        if (state.filters.kernels.size === 0) continue;
+        if (state.filters.firmwares.size === 0) continue;
+        // If filtering is active (not all selected), exclude cells without info or with non-matching info
+        const kernelFilterActive = state.filters.kernels.size < state.options.kernels.length;
+        const firmwareFilterActive = state.filters.firmwares.size < state.options.firmwares.length;
+        if (kernelFilterActive && (!sysInfo.kernel || !state.filters.kernels.has(sysInfo.kernel))) continue;
+        if (firmwareFilterActive && (!sysInfo.linux_firmware || !state.filters.firmwares.has(sysInfo.linux_firmware))) continue;
+
+        // Build group key
+        const kernel = groupByKernel ? (sysInfo.kernel || "unknown") : null;
+        const firmware = groupByFirmware ? (sysInfo.linux_firmware || "unknown") : null;
+        const groupKey = `${kernel || ""}__${firmware || ""}`;
+
+        if (!groups.has(groupKey)) {
+            groups.set(groupKey, { kernel, firmware, cellKeys: [] });
+        }
+        groups.get(groupKey).cellKeys.push(cellKey);
+    }
+
+    // Create a model entry for each group
+    const result = [];
+    for (const [groupKey, group] of groups) {
+        // Create a subset of backends for this group
+        const groupBackends = {};
+        for (const cellKey of group.cellKeys) {
+            groupBackends[cellKey] = model.backends[cellKey];
+        }
+
+        result.push({
+            ...model,
+            backends: groupBackends,
+            _groupKernel: group.kernel,
+            _groupFirmware: group.firmware,
+            _groupKey: groupKey,
+        });
+    }
+
+    return result;
 }
 
 function computeWinners(model, backends) {
@@ -889,6 +1146,36 @@ function formatSize(size) {
 function formatSizeLabel(size) {
     if (size >= 1000) return `${(size / 1000).toFixed(1)}kB`;
     return `${Math.round(size)}B`;
+}
+
+function formatRunTimestamp(timestamp, runId) {
+    // Try to extract Unix timestamp from run_id (format: "PID_UNIXTIME")
+    const unixTime = extractUnixTimestamp(runId);
+    if (unixTime) {
+        const date = new Date(unixTime * 1000);
+        return date.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+    }
+    // Fallback to provided timestamp or run_id
+    if (timestamp) return timestamp;
+    return runId || "unknown";
+}
+
+function extractUnixTimestamp(runId) {
+    if (!runId) return null;
+    const parts = runId.split("_");
+    if (parts.length >= 2) {
+        const unixTime = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(unixTime) && unixTime > 1000000000) {
+            return unixTime;
+        }
+    }
+    return null;
+}
+
+function formatDateLabel(unixTime) {
+    if (!unixTime) return "—";
+    const date = new Date(unixTime * 1000);
+    return date.toISOString().split("T")[0]; // YYYY-MM-DD
 }
 
 function sortBackendsByModel(model, direction) {
