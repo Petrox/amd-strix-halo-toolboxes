@@ -67,36 +67,48 @@
         </div>
         <div class="control">
             <label>Kernel</label>
-            <div class="multiselect" id="kernel-select">
-                <button type="button" class="multiselect-btn">
-                    <span class="multiselect-label">All kernels</span>
-                    <span class="multiselect-arrow">▼</span>
-                </button>
-                <div class="multiselect-dropdown hidden">
-                    <input type="text" class="multiselect-search" placeholder="Search kernels...">
-                    <div class="multiselect-actions">
-                        <button type="button" class="multiselect-all">Select All</button>
-                        <button type="button" class="multiselect-none">Clear</button>
+            <div class="control-row">
+                <div class="multiselect" id="kernel-select">
+                    <button type="button" class="multiselect-btn">
+                        <span class="multiselect-label">All kernels</span>
+                        <span class="multiselect-arrow">▼</span>
+                    </button>
+                    <div class="multiselect-dropdown hidden">
+                        <input type="text" class="multiselect-search" placeholder="Search kernels...">
+                        <div class="multiselect-actions">
+                            <button type="button" class="multiselect-all">Select All</button>
+                            <button type="button" class="multiselect-none">Clear</button>
+                        </div>
+                        <div class="multiselect-options"></div>
                     </div>
-                    <div class="multiselect-options"></div>
                 </div>
+                <label class="inline-checkbox" title="Group results by kernel version">
+                    <input type="checkbox" id="group-by-kernel">
+                    <span>Group</span>
+                </label>
             </div>
         </div>
         <div class="control">
             <label>Firmware</label>
-            <div class="multiselect" id="firmware-select">
-                <button type="button" class="multiselect-btn">
-                    <span class="multiselect-label">All firmware</span>
-                    <span class="multiselect-arrow">▼</span>
-                </button>
-                <div class="multiselect-dropdown hidden">
-                    <input type="text" class="multiselect-search" placeholder="Search firmware...">
-                    <div class="multiselect-actions">
-                        <button type="button" class="multiselect-all">Select All</button>
-                        <button type="button" class="multiselect-none">Clear</button>
+            <div class="control-row">
+                <div class="multiselect" id="firmware-select">
+                    <button type="button" class="multiselect-btn">
+                        <span class="multiselect-label">All firmware</span>
+                        <span class="multiselect-arrow">▼</span>
+                    </button>
+                    <div class="multiselect-dropdown hidden">
+                        <input type="text" class="multiselect-search" placeholder="Search firmware...">
+                        <div class="multiselect-actions">
+                            <button type="button" class="multiselect-all">Select All</button>
+                            <button type="button" class="multiselect-none">Clear</button>
+                        </div>
+                        <div class="multiselect-options"></div>
                     </div>
-                    <div class="multiselect-options"></div>
                 </div>
+                <label class="inline-checkbox" title="Group results by firmware version">
+                    <input type="checkbox" id="group-by-firmware">
+                    <span>Group</span>
+                </label>
             </div>
         </div>
         <div class="control">
@@ -140,6 +152,17 @@
             </div>
             <div class="range-values">
                 <span id="sizeLoVal">0B</span> – <span id="sizeHiVal">0B</span>
+            </div>
+        </div>
+        <div class="control grow slider-block">
+            <label>Run date range (UTC)</label>
+            <div class="range-wrap">
+                <input type="range" id="dateLo" step="86400">
+                <input type="range" id="dateHi" step="86400">
+                <div class="range-track" id="dateTrack"></div>
+            </div>
+            <div class="range-values">
+                <span id="dateLoVal">—</span> – <span id="dateHiVal">—</span>
             </div>
         </div>
     </section>

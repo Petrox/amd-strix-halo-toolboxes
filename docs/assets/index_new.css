@@ -206,3 +206,46 @@
 .sysinfo-tooltip dd {
     margin: 0.125rem 0 0 0;
 }
+
+/* Control row with inline elements */
+.control-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.control-row .multiselect {
+    flex: 1;
+}
+
+/* Inline checkbox next to dropdown */
+.inline-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: var(--text-muted, #666);
+    white-space: nowrap;
+}
+
+.inline-checkbox input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.inline-checkbox:hover {
+    color: var(--text, #333);
+}
+
+/* Grouped row sub-info styling */
+.model-subinfo {
+    font-size: 0.6875rem;
+    color: var(--text-muted, #666);
+    margin-top: 2px;
+}
+
+.model-subinfo-label {
+    font-weight: 500;
+    margin-right: 0.25rem;
+}
