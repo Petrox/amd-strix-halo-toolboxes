@@ -501,7 +501,7 @@ Each **benchmark** object contains:
 The format is designed for easy git merging:
 
 1. **One run per line**: Each `run_benchmarks.sh` execution adds one line to the file
-2. **Sorted by run_id**: Runs are sorted chronologically, so concurrent runs from different machines append at predictable positions
+2. **Sorted by run_id**: Runs are sorted lexicographically by `pid_timestamp`. Since PIDs differ across machines, concurrent contributions scatter across the file rather than clustering by time, reducing adjacent-line merge conflicts.
 3. **Keys sorted alphabetically**: Within each JSON object, keys are sorted for consistent diffs
 4. **Idempotent generation**: Re-running `generate_results_json_new.py` preserves existing runs and only adds new ones
 
