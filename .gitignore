@@ -14,3 +14,9 @@ benchmark/results/system_info.json
 # Temporary/scratch files
 *.tmp
 *.bak
+
+# Benchmark state file (used by is_benchmark_running.sh)
+benchmark/.benchmark_state
+
+# Old results format - causes merge conflicts and is superseded by results_new.jsonl.js
+docs/results.json
