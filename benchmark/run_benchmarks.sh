@@ -5,6 +5,7 @@ set -uo pipefail
 MODEL_LIMIT=""
 START_INDEX=1
 TIMEOUT_SECS=1800
+COMMIT_PUSH=false
 while [[ $# -gt 0 ]]; do
   case $1 in
     --limit)
@@ -31,11 +32,16 @@ while [[ $# -gt 0 ]]; do
       TIMEOUT_SECS="${1#*=}"
       shift
       ;;
+    --commitpush)
+      COMMIT_PUSH=true
+      shift
+      ;;
     -h|--help)
-      echo "Usage: $0 [--start-index N] [--limit N] [--timeout SECS]"
+      echo "Usage: $0 [--start-index N] [--limit N] [--timeout SECS] [--commitpush]"
       echo "  --start-index N  Start from model N (1-based, alphabetically sorted)"
       echo "  --limit N        Limit the number of models to benchmark"
       echo "  --timeout SECS   Max seconds per benchmark test (default: 1800)"
+      echo "  --commitpush     Auto-commit and push results after completion"
       exit 0
       ;;
     *)
@@ -56,7 +62,14 @@ RUN_ID="$$_$(date +%s)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODEL_DIR="$SCRIPT_DIR/models"
 RESULTDIR="$SCRIPT_DIR/results"
+STATE_FILE="$SCRIPT_DIR/.benchmark_state"
 mkdir -p "$RESULTDIR"
+
+# Cleanup state file on exit
+cleanup_state() {
+  rm -f "$STATE_FILE"
+}
+trap cleanup_state EXIT INT TERM
 
 # Check if models directory exists
 if [[ ! -d "$MODEL_DIR" ]]; then
@@ -76,6 +89,27 @@ if [[ ! -d "$MODEL_DIR" ]]; then
 fi
 
 echo "$(ts) Starting benchmark run: ${RUN_ID}"
+
+# Write initial state file
+write_state() {
+  cat > "$STATE_FILE" <<EOF
+RUN_ID=$RUN_ID
+PID=$$
+START_TIME=$START_TIME
+CURRENT_STEP=$CURRENT_STEP
+TOTAL_STEPS=$TOTAL_STEPS
+CURRENT_MODEL=$CURRENT_MODEL
+CURRENT_ENV=$CURRENT_ENV
+CURRENT_CONTEXT=$CURRENT_CONTEXT
+CURRENT_CMD=$CURRENT_CMD
+EOF
+}
+
+# Initialize state variables
+CURRENT_MODEL=""
+CURRENT_ENV=""
+CURRENT_CONTEXT=""
+CURRENT_CMD=""
 
 # Capture system info (regenerate every run to capture kernel changes etc)
 python3 -c '
@@ -191,6 +225,13 @@ for p in "${MODEL_PATHS[@]}"; do
   echo "  • $p"
 done
 echo
+
+# Track benchmark results for commit summary
+PASSED_COUNT=0
+FAILED_COUNT=0
+SKIPPED_COUNT=0
+declare -A ENVS_USED=()
+declare -A MODELS_TESTED=()
 
 # Calculate total benchmark steps for progress indicator
 # Each model runs: 4 ROCm envs × 2 hblt modes × 2 contexts + 2 Vulkan envs × 1 mode × 2 contexts = 20 steps
@@ -376,6 +417,7 @@ for MODEL_PATH in "${MODEL_PATHS[@]}"; do
 
           if [[ -s "$OUT" ]]; then
             echo "$(ts) ⏩ $(show_progress) Skipping [${ENV}] ${MODEL_NAME}${SUFFIX}${CTX_SUFFIX:+ ($CTX_SUFFIX)}, log exists"
+            ((SKIPPED_COUNT++)) || true
             continue
           fi
 
@@ -385,12 +427,20 @@ for MODEL_PATH in "${MODEL_PATHS[@]}"; do
           TOOLBOX_NAME="${TOOLBOX_NAMES[$ENV]}"
           if ! ensure_toolbox_works "$TOOLBOX_NAME"; then
             echo "$(ts) ⏩ $(show_progress) Skipping [${ENV}] ${MODEL_NAME}${SUFFIX}${CTX_SUFFIX:+ ($CTX_SUFFIX)}, toolbox unavailable"
+            ((SKIPPED_COUNT++)) || true
             continue
           fi
 
           printf "\n%s ▶ $(show_progress) [%s] %s%s%s\n" "$(ts)" "$ENV" "$MODEL_NAME" "${SUFFIX:+ $SUFFIX}" "${CTX_SUFFIX:+ $CTX_SUFFIX}"
           printf "  → log: %s\n" "$OUT"
           printf "  → cmd: %s\n\n" "${FULL_CMD[*]}"
+
+          # Update state file for monitoring
+          CURRENT_MODEL="$MODEL_NAME"
+          CURRENT_ENV="$ENV"
+          CURRENT_CONTEXT="$CTX"
+          CURRENT_CMD="${FULL_CMD[*]}"
+          write_state
 
           # Write metadata header
           write_benchmark_meta "$OUT" "$TOOLBOX_NAME" "$MODEL_PATH" "$RUN_ID"
@@ -438,8 +488,12 @@ for MODEL_PATH in "${MODEL_PATHS[@]}"; do
               last_line=$(grep -v '^$' "$OUT" | tail -1 | cut -c1-80)
               [[ -n "$last_line" ]] && echo "        → Last output: ${last_line}"
             fi
+            ((FAILED_COUNT++)) || true
           else
             echo "$(ts)   ✔ [${ENV}] ${MODEL_NAME}${SUFFIX}${CTX_SUFFIX:+ $CTX_SUFFIX} : DONE"
+            ((PASSED_COUNT++)) || true
+            ENVS_USED[$ENV]=1
+            MODELS_TESTED[$MODEL_NAME]=1
           fi
         done
       done
@@ -461,5 +515,71 @@ if [[ -f "$SCRIPT_DIR/generate_results_json_new.py" ]]; then
   python3 "$SCRIPT_DIR/generate_results_json_new.py" && echo "$(ts) ✅ results_new.json updated" || echo "$(ts) ❌ generate_results_json_new.py failed"
 fi
 
+# Summary
+TOTAL_EXECUTED=$((PASSED_COUNT + FAILED_COUNT))
 echo ""
+echo "$(ts) ═══════════════════════════════════════════════════════════════"
 echo "$(ts) Benchmark run ${RUN_ID} complete."
+echo "$(ts)   Passed:  ${PASSED_COUNT}"
+echo "$(ts)   Failed:  ${FAILED_COUNT}"
+echo "$(ts)   Skipped: ${SKIPPED_COUNT}"
+if (( ${#MODELS_TESTED[@]} > 0 )); then
+  echo "$(ts)   Models:  ${#MODELS_TESTED[@]} (${!MODELS_TESTED[*]::3}...)" | cut -c1-100
+fi
+if (( ${#ENVS_USED[@]} > 0 )); then
+  echo "$(ts)   Envs:    ${!ENVS_USED[*]}"
+fi
+echo "$(ts) ═══════════════════════════════════════════════════════════════"
+
+# Commit and push if requested
+if [[ "$COMMIT_PUSH" == "true" ]]; then
+  echo ""
+  echo "$(ts) --commitpush requested, checking results..."
+
+  if (( PASSED_COUNT == 0 )); then
+    echo "$(ts) ❌ All experiments failed (${FAILED_COUNT} failures). Skipping commit."
+    exit 1
+  fi
+
+  # Build commit message
+  MODEL_COUNT=${#MODELS_TESTED[@]}
+  ENV_LIST="${!ENVS_USED[*]}"
+
+  # Create a concise commit message
+  COMMIT_MSG="Benchmark: ${PASSED_COUNT} passed, ${FAILED_COUNT} failed"
+  if (( MODEL_COUNT > 0 )); then
+    COMMIT_MSG="${COMMIT_MSG} (${MODEL_COUNT} models)"
+  fi
+
+  COMMIT_BODY="Run ID: ${RUN_ID}
+Environments: ${ENV_LIST:-none}
+Models tested: ${MODEL_COUNT}
+Results: ${PASSED_COUNT} passed, ${FAILED_COUNT} failed, ${SKIPPED_COUNT} skipped"
+
+  # Change to repo root for git operations
+  cd "$SCRIPT_DIR/.."
+
+  echo "$(ts) Staging result files..."
+  git add docs/results_new.jsonl.js docs/results.json benchmark/results/ 2>/dev/null || true
+
+  # Check if there are changes to commit
+  if git diff --cached --quiet; then
+    echo "$(ts) No changes to commit."
+  else
+    echo "$(ts) Committing..."
+    git commit -m "$(cat <<EOF
+${COMMIT_MSG}
+
+${COMMIT_BODY}
+EOF
+)"
+
+    echo "$(ts) Pushing to remote..."
+    if git push; then
+      echo "$(ts) ✅ Results committed and pushed successfully."
+    else
+      echo "$(ts) ❌ Push failed. You may need to pull first and resolve conflicts."
+      exit 1
+    fi
+  fi
+fi

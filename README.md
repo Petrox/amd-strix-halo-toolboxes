@@ -430,13 +430,118 @@ This will launch the TUI, where you can:
 
 The script automatically starts the necessary toolbox containers locally and on the remote nodes to handle the inference.
 
-## 8. More Documentation
+## 8. Running Benchmarks
 
-* [docs/benchmarks.md](docs/benchmarks.md): Full benchmark logs, model list, parsed results  
-* [docs/vram-estimator.md](docs/vram-estimator.md): Memory planning, practical example runs  
-* [docs/building.md](docs/building.md): Local build, toolbox customization, advanced use  
+The `benchmark/run_benchmarks.sh` script automates performance testing across all models and toolbox environments.
 
-## 9. References
+### Terminology
+
+- **Experiment**: A single `llama-bench` invocation for one model + one environment + one context setting. Produces one `.log` file in `benchmark/results/`.
+- **Run**: One execution of `run_benchmarks.sh`. A run contains multiple experiments (one per model/env/context combination). Each run is identified by a unique `run_id` in the format `pid_timestamp` (e.g., `1041875_1769518681`).
+- **Benchmark**: A single performance measurement within an experiment (e.g., `pp512` prompt processing or `tg128` token generation).
+
+### Usage
+
+```bash
+cd benchmark
+./run_benchmarks.sh [OPTIONS]
+```
+
+**Options:**
+- `--start-index N` — Start from model N (1-based, alphabetically sorted)
+- `--limit N` — Limit the number of models to benchmark
+- `--timeout SECS` — Max seconds per experiment (default: 1800)
+- `--commitpush` — Auto-commit and push results after completion (unless all experiments failed)
+
+### Results File Format (`docs/results_new.jsonl.js`)
+
+Results are stored in JSONL.js format—a JavaScript-loadable JSONL file wrapped with `_=[` and `]`:
+
+```javascript
+_=[
+{"run_id":"1041875_1769518681","benchmarks":[...],"environments":[...],...},
+{"run_id":"1041876_1769604000","benchmarks":[...],"environments":[...],...},
+]
+```
+
+Each line (after `_=[` and before `]`) is one **run** as a JSON object with these fields:
+
+| Field | Description |
+|-------|-------------|
+| `run_id` | Unique identifier: `pid_timestamp` format |
+| `generated_at` | ISO 8601 timestamp when results were generated |
+| `system_info` | Host system details (distro, kernel, firmware, sysctl settings) |
+| `environments` | List of toolbox environments tested (e.g., `["rocm-7.2", "vulkan_radv"]`) |
+| `llamacpp_builds` | llama.cpp build info (`hash` and build `number`) |
+| `benchmarks` | Array of individual benchmark results |
+
+Each **benchmark** object contains:
+
+| Field | Description |
+|-------|-------------|
+| `model` | Original model filename |
+| `model_clean` | Cleaned model name (shard suffixes removed) |
+| `model_id` | Model fingerprint: `partial_hash`, `size_bytes`, `mtime_unix`, `mtime_iso` |
+| `env` | Environment name (e.g., `rocm-7.2`, `vulkan_radv`) |
+| `env_base` / `env_variant` | Split environment (e.g., `rocm` / `7.2`) |
+| `fa` | Flash attention enabled (boolean) |
+| `context` | Context setting (`default` or `longctx32768`) |
+| `context_tokens` | Context size in tokens (null for default) |
+| `test` | Test type: `pp512` (prompt processing), `tg128` (token generation), etc. |
+| `tps_mean` / `tps_std` | Tokens per second: mean and standard deviation |
+| `error` / `error_type` | Error flag and type (`load`, `hang`, `runtime`) |
+| `quant` | Quantization (e.g., `Q4_K_M`, `BF16`) |
+| `params_b` | Model parameters in billions |
+| `file_size_gib` | Model file size in GiB |
+| `rpc` | Distributed RPC mode (boolean) |
+| `toolbox` | Toolbox container info: `name`, `container_id`, `created_iso`, `llamacpp_build` |
+
+### Git-Friendly Merging
+
+The format is designed for easy git merging:
+
+1. **One run per line**: Each `run_benchmarks.sh` execution adds one line to the file
+2. **Sorted by run_id**: Runs are sorted chronologically, so concurrent runs from different machines append at predictable positions
+3. **Keys sorted alphabetically**: Within each JSON object, keys are sorted for consistent diffs
+4. **Idempotent generation**: Re-running `generate_results_json_new.py` preserves existing runs and only adds new ones
+
+To merge results from multiple machines:
+```bash
+# Machine A runs benchmarks, pushes results
+git pull && ./run_benchmarks.sh --commitpush
+
+# Machine B runs benchmarks, merges with A's results
+git pull   # Get A's new run
+./run_benchmarks.sh --commitpush   # B's run appends as new line
+```
+
+### Monitoring Benchmark Progress
+
+Use `is_benchmark_running.sh` to check the status of a running benchmark:
+
+```bash
+./benchmark/is_benchmark_running.sh
+```
+
+This displays:
+- Current experiment being run (model, environment, context)
+- Progress (X of Y experiments)
+- Elapsed time and ETA
+- CPU, GPU, and RAM usage
+
+Exit codes:
+- `0` — Benchmark is running
+- `1` — No benchmark is running
+
+Useful for automation scripts that need to wait for benchmarks to complete before rebooting or switching kernels.
+
+## 9. More Documentation
+
+* [docs/benchmarks.md](docs/benchmarks.md): Full benchmark logs, model list, parsed results
+* [docs/vram-estimator.md](docs/vram-estimator.md): Memory planning, practical example runs
+* [docs/building.md](docs/building.md): Local build, toolbox customization, advanced use
+
+## 10. References
 
 * The main reference for AMD Ryzen AI MAX home labs, by deseven (there's also a Discord server): [https://strixhalo-homelab.d7.wtf/](https://strixhalo-homelab.d7.wtf/)
 * Most comprehesive repostiry of test builds for Strix Halo by lhl -> [https://github.com/lhl/strix-halo-testing/tree/main](https://github.com/lhl/strix-halo-testing/tree/main)
